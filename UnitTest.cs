@@ -111,6 +111,70 @@ namespace EFAutomapperBug
                 var count = await dbContext.TestItems.CountAsync();
 
                 Assert.True(count == 1, "Expected count to be 1 after update");
+
+                var item = await dbContext.TestItems
+                    .Include(e => e.TestItemChild)
+                    .FirstOrDefaultAsync();
+
+                Assert.NotNull(item);
+                Assert.True(item.TestItemChildId == 1, "Expected TestItemChildId to be 1");
+                Assert.True(item.TestItemChild.Id == 1, "Expected TestItemChild.Id to be 1");
+            }
+        }
+
+        [Fact]
+        public async Task AutoMapper_IgnoreNavProp_ShouldNotDelete()
+        {
+            using (var dbContext = CreateDbContext())
+            {
+                await this.SeedDbContext(dbContext);
+            }
+
+            // There should be one item in the TestItems table
+            using(var dbContext = CreateDbContext())
+            {
+                var count = await dbContext.TestItems.CountAsync();
+
+                Assert.True(count == 1, "Expected count to be 1 before update");
+            }
+
+            // Update test value
+            using(var dbContext = CreateDbContext())
+            {
+                var item = await dbContext.TestItems
+                    .Include(e => e.TestItemChild)
+                    .FirstAsync();
+                
+                var mapper =  new Mapper(new MapperConfiguration(config =>
+                {
+                    config.CreateMap<TestItemDTO, TestItem>()
+                        .ForMember(d => d.TestItemChild, opts => opts.Ignore());
+                }));
+
+                mapper.Map(
+                    new TestItemDTO
+                    {
+                        TestItemChildId = 1,
+                    },
+                    item);
+
+                await dbContext.SaveChangesAsync();
+            }
+
+            // There should be one item in the TestItems table
+            using(var dbContext = CreateDbContext())
+            {
+                var count = await dbContext.TestItems.CountAsync();
+
+                Assert.True(count == 1, "Expected count to be 1 after update");
+
+                var item = await dbContext.TestItems
+                    .Include(e => e.TestItemChild)
+                    .FirstOrDefaultAsync();
+
+                Assert.NotNull(item);
+                Assert.True(item.TestItemChildId == 1, "Expected TestItemChildId to be 1");
+                Assert.True(item.TestItemChild.Id == 1, "Expected TestItemChild.Id to be 1");
             }
         }
 
@@ -149,6 +213,14 @@ namespace EFAutomapperBug
                 var count = await dbContext.TestItems.CountAsync();
 
                 Assert.True(count == 1, "Expected count to be 1 after update");
+
+                var item = await dbContext.TestItems
+                    .Include(e => e.TestItemChild)
+                    .FirstOrDefaultAsync();
+
+                Assert.NotNull(item);
+                Assert.True(item.TestItemChildId == 1, "Expected TestItemChildId to be 1");
+                Assert.True(item.TestItemChild.Id == 1, "Expected TestItemChild.Id to be 1");
             }
         }
 
