@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Xunit;
 using AutoMapper;
 using System.Linq;
+using System.Data.Common;
 
 namespace EFAutomapperBug
 {
@@ -58,31 +59,28 @@ namespace EFAutomapperBug
 
     public class UnitTest
     {
-        [Fact]
-        public async Task Test()
-        {
-            var connection = new SqliteConnection("Filename=:memory:");
-            connection.Open();
+        private readonly DbConnection connection;
 
-            // Create tables in database
+        public UnitTest()
+        {
+            this.connection = new SqliteConnection("Filename=:memory:");
+            this.connection.Open();
+        }
+
+        [Fact]
+        public async Task AutoMapper_ShouldNotDelete()
+        {
             using (var dbContext = CreateDbContext())
             {
-                await dbContext.Database.EnsureCreatedAsync();
+                await this.SeedDbContext(dbContext);
             }
 
-            // Insert test value
+            // There should be one item in the TestItems table
             using(var dbContext = CreateDbContext())
             {
-                dbContext.TestItems.Add(new TestItem
-                {
-                    Id = 1,
-                    TestItemChild = new TestItemChild
-                    {
-                        Id = 1,
-                    }
-                });
+                var count = await dbContext.TestItems.CountAsync();
 
-                await dbContext.SaveChangesAsync();
+                Assert.True(count == 1, "Expected count to be 1 before update");
             }
 
             // Update test value
@@ -112,16 +110,164 @@ namespace EFAutomapperBug
             {
                 var count = await dbContext.TestItems.CountAsync();
 
-                Assert.Equal(1, count);
+                Assert.True(count == 1, "Expected count to be 1 after update");
+            }
+        }
+
+        [Fact]
+        public async Task ManualMapping_ShouldNotDelete()
+        {
+            using (var dbContext = CreateDbContext())
+            {
+                await this.SeedDbContext(dbContext);
             }
 
-            connection.Dispose();
+            // There should be one item in the TestItems table
+            using(var dbContext = CreateDbContext())
+            {
+                var count = await dbContext.TestItems.CountAsync();
 
-            TestDbContext CreateDbContext()
-                => new TestDbContext(
+                Assert.True(count == 1, "Expected count to be 1 before update");
+            }
+
+            // Update test value
+            using(var dbContext = CreateDbContext())
+            {
+                var item = await dbContext.TestItems
+                    .Include(e => e.TestItemChild)
+                    .FirstAsync();
+
+                item.TestItemChild = null;
+                item.TestItemChildId = 1;
+
+                await dbContext.SaveChangesAsync();
+            }
+
+            // There should be one item in the TestItems table
+            using(var dbContext = CreateDbContext())
+            {
+                var count = await dbContext.TestItems.CountAsync();
+
+                Assert.True(count == 1, "Expected count to be 1 after update");
+            }
+        }
+
+        [Fact]
+        public async Task ManualMapping_IngoreNavProp_NoChange_ShouldNotDelete()
+        {
+            using (var dbContext = CreateDbContext())
+            {
+                await this.SeedDbContext(dbContext);
+            }
+
+            // There should be one item in the TestItems table
+            using(var dbContext = CreateDbContext())
+            {
+                var count = await dbContext.TestItems.CountAsync();
+
+                Assert.True(count == 1, "Expected count to be 1 before update");
+            }
+
+            // Update test value
+            using(var dbContext = CreateDbContext())
+            {
+                var item = await dbContext.TestItems
+                    .Include(e => e.TestItemChild)
+                    .FirstAsync();
+                
+                item.TestItemChildId = 1;
+
+                await dbContext.SaveChangesAsync();
+            }
+
+            // There should be one item in the TestItems table
+            using(var dbContext = CreateDbContext())
+            {
+                var count = await dbContext.TestItems.CountAsync();
+
+                Assert.True(count == 1, "Expected count to be 1 after update");
+
+                var item = await dbContext.TestItems
+                    .Include(e => e.TestItemChild)
+                    .FirstOrDefaultAsync();
+
+                Assert.NotNull(item);
+                Assert.True(item.TestItemChildId == 1, "Expected TestItemChildId to be 1");
+                Assert.True(item.TestItemChild.Id == 1, "Expected TestItemChild.Id to be 1");
+            }
+        }
+        
+        [Fact]
+        public async Task ManualMapping_IngoreNavProp_Change_ShouldNotDelete()
+        {
+            using (var dbContext = CreateDbContext())
+            {
+                await this.SeedDbContext(dbContext);
+            }
+
+            // There should be one item in the TestItems table
+            using(var dbContext = CreateDbContext())
+            {
+                var count = await dbContext.TestItems.CountAsync();
+
+                Assert.True(count == 1, "Expected count to be 1 before update");
+            }
+
+            // Update test value
+            using(var dbContext = CreateDbContext())
+            {
+                var item = await dbContext.TestItems
+                    .Include(e => e.TestItemChild)
+                    .FirstAsync();
+
+                item.TestItemChildId = 2;
+
+                await dbContext.SaveChangesAsync();
+            }
+
+            // There should be one item in the TestItems table
+            using(var dbContext = CreateDbContext())
+            {
+                var count = await dbContext.TestItems.CountAsync();
+
+                Assert.True(count == 1, "Expected count to be 1 after update");
+
+                var item = await dbContext.TestItems
+                    .Include(e => e.TestItemChild)
+                    .FirstOrDefaultAsync();
+
+                Assert.NotNull(item);
+                Assert.True(item.TestItemChildId == 2, "Expected TestItemChildId to be 2");
+                Assert.True(item.TestItemChild.Id == 2, "Expected TestItemChild.Id to be 2");
+            }
+        }
+
+        private TestDbContext CreateDbContext()
+            => new TestDbContext(
                 new DbContextOptionsBuilder<TestDbContext>()
-                    .UseSqlite(connection)
+                    .UseSqlite(this.connection)
                     .Options);
+        
+        private async Task SeedDbContext(TestDbContext dbContext)
+        {
+            // Create tables in database
+            await dbContext.Database.EnsureCreatedAsync();
+
+            // Insert test value
+            dbContext.TestItems.Add(new TestItem
+            {
+                Id = 1,
+                TestItemChild = new TestItemChild
+                {
+                    Id = 1,
+                }
+            });
+           
+            dbContext.TestItemChildren.Add(new TestItemChild
+            {
+                Id = 2,
+            });
+            await dbContext.SaveChangesAsync();
         }
     }
 }
